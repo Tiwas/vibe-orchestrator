@@ -29,7 +29,7 @@ macOS/Linux:
 ./scripts/start-server.sh --repo /path/to/project
 ```
 
-Then open `http://127.0.0.1:8765`.
+The scripts open `http://127.0.0.1:8765` automatically when a graphical shell is available.
 
 If `-Repo` / `--repo` is omitted, the start script opens a graphical folder picker when one is available. Use `-NoPicker` / `--no-picker` to fall back to the current directory.
 
@@ -37,8 +37,10 @@ Useful options:
 
 ```powershell
 .\scripts\start-server.ps1 -Repo C:\path\to\project -Port 9000 -NoInstall
+.\scripts\start-server.ps1 -Repo C:\path\to\project -NoOpen
 ```
 
 ```sh
 ./scripts/start-server.sh --repo /path/to/project --port 9000 --no-install
+./scripts/start-server.sh --repo /path/to/project --no-open
 ```

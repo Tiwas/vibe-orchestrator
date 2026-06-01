@@ -9,6 +9,7 @@ HOST="${VIBE_ORCHESTRATOR_HOST:-127.0.0.1}"
 PORT="${VIBE_ORCHESTRATOR_PORT:-8765}"
 TARGET_REPO_INPUT="${VIBE_ORCHESTRATOR_TARGET_REPO:-}"
 NO_PICKER=0
+NO_OPEN=0
 NO_INSTALL=0
 
 while [ "$#" -gt 0 ]; do
@@ -33,8 +34,12 @@ while [ "$#" -gt 0 ]; do
             NO_PICKER=1
             shift
             ;;
+        --no-open)
+            NO_OPEN=1
+            shift
+            ;;
         -h|--help)
-            echo "Usage: scripts/start-server.sh [--repo /path/to/project] [--host 127.0.0.1] [--port 8765] [--no-install] [--no-picker]"
+            echo "Usage: scripts/start-server.sh [--repo /path/to/project] [--host 127.0.0.1] [--port 8765] [--no-install] [--no-picker] [--no-open]"
             exit 0
             ;;
         *)
@@ -131,6 +136,101 @@ resolve_target_repo() {
     printf '%s\n' "$TARGET_REPO"
 }
 
+has_ui_shell() {
+    if [ -n "${CI:-}" ] || [ -n "${SSH_CLIENT:-}" ] || [ -n "${SSH_TTY:-}" ]; then
+        return 1
+    fi
+
+    case "$(uname -s)" in
+        Darwin)
+            command -v open >/dev/null 2>&1
+            return $?
+            ;;
+        *)
+            if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+                return 0
+            fi
+            return 1
+            ;;
+    esac
+}
+
+open_url() {
+    URL_TO_OPEN="$1"
+
+    case "$(uname -s)" in
+        Darwin)
+            if command -v open >/dev/null 2>&1; then
+                open "$URL_TO_OPEN" >/dev/null 2>&1 &
+                return 0
+            fi
+            ;;
+    esac
+
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$URL_TO_OPEN" >/dev/null 2>&1 &
+        return 0
+    fi
+
+    if command -v gio >/dev/null 2>&1; then
+        gio open "$URL_TO_OPEN" >/dev/null 2>&1 &
+        return 0
+    fi
+
+    return 1
+}
+
+open_when_ready() {
+    URL_TO_OPEN="$1"
+    HEALTH_URL="$URL_TO_OPEN/api/health"
+
+    if [ "$NO_OPEN" -eq 1 ]; then
+        return
+    fi
+
+    if ! has_ui_shell; then
+        echo "No UI shell detected; not opening browser." >&2
+        return
+    fi
+
+    (
+        i=0
+        while [ "$i" -lt 60 ]; do
+            if command -v curl >/dev/null 2>&1; then
+                if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+                    open_url "$URL_TO_OPEN"
+                    exit 0
+                fi
+            elif command -v wget >/dev/null 2>&1; then
+                if wget -q -O /dev/null "$HEALTH_URL" >/dev/null 2>&1; then
+                    open_url "$URL_TO_OPEN"
+                    exit 0
+                fi
+            else
+                sleep 1
+                open_url "$URL_TO_OPEN"
+                exit 0
+            fi
+            i=$((i + 1))
+            sleep 1
+        done
+    ) &
+}
+
+browser_url() {
+    case "$HOST" in
+        0.0.0.0)
+            printf 'http://127.0.0.1:%s\n' "$PORT"
+            ;;
+        ::)
+            printf 'http://[::1]:%s\n' "$PORT"
+            ;;
+        *)
+            printf 'http://%s:%s\n' "$HOST" "$PORT"
+            ;;
+    esac
+}
+
 TARGET_REPO=$(resolve_target_repo)
 
 cd "$REPO_ROOT"
@@ -149,6 +249,9 @@ fi
 export VIBE_ORCHESTRATOR_HOST="$HOST"
 export VIBE_ORCHESTRATOR_PORT="$PORT"
 export VIBE_ORCHESTRATOR_TARGET_REPO="$TARGET_REPO"
+
+BROWSER_URL=$(browser_url)
+open_when_ready "$BROWSER_URL"
 
 echo "Starting Vibe Orchestrator on http://$HOST:$PORT"
 echo "Target repository: $TARGET_REPO"

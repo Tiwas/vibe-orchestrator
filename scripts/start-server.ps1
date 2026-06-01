@@ -10,6 +10,8 @@ param(
 
     [switch]$NoPicker,
 
+    [switch]$NoOpen,
+
     [switch]$NoInstall
 )
 
@@ -104,6 +106,62 @@ function Resolve-TargetRepo {
     return $ResolvedPath
 }
 
+function Test-UiShell {
+    if ($env:CI -or $env:SSH_CLIENT -or $env:SSH_TTY) {
+        return $false
+    }
+
+    return [Environment]::UserInteractive
+}
+
+function Start-BrowserWhenReady {
+    param([string]$Url)
+
+    if ($NoOpen) {
+        return
+    }
+
+    if (-not (Test-UiShell)) {
+        Write-Host "No UI shell detected; not opening browser."
+        return
+    }
+
+    $HealthUrl = "$Url/api/health"
+    Start-Job -ScriptBlock {
+        param($UrlToOpen, $UrlToPoll)
+
+        for ($Attempt = 0; $Attempt -lt 60; $Attempt++) {
+            try {
+                $Response = Invoke-WebRequest -Uri $UrlToPoll -UseBasicParsing -TimeoutSec 1
+                if ($Response.StatusCode -ge 200 -and $Response.StatusCode -lt 500) {
+                    Start-Process $UrlToOpen
+                    return
+                }
+            }
+            catch {
+                Start-Sleep -Milliseconds 500
+            }
+        }
+    } -ArgumentList $Url, $HealthUrl | Out-Null
+}
+
+function Get-BrowserUrl {
+    param(
+        [string]$HostName,
+        [int]$PortNumber
+    )
+
+    $BrowserHost = $HostName
+    if ($BrowserHost -eq "0.0.0.0") {
+        $BrowserHost = "127.0.0.1"
+    }
+    elseif ($BrowserHost -eq "::") {
+        $BrowserHost = "[::1]"
+    }
+
+    return "http://${BrowserHost}:${PortNumber}"
+}
+
 $TargetRepoPath = Resolve-TargetRepo $Repo
 
 Push-Location $RepoRoot
@@ -121,6 +179,9 @@ try {
     $env:VIBE_ORCHESTRATOR_HOST = $BindHost
     $env:VIBE_ORCHESTRATOR_PORT = [string]$Port
     $env:VIBE_ORCHESTRATOR_TARGET_REPO = $TargetRepoPath
+
+    $ServerUrl = Get-BrowserUrl -HostName $BindHost -PortNumber $Port
+    Start-BrowserWhenReady $ServerUrl
 
     Write-Host "Starting Vibe Orchestrator on http://${BindHost}:${Port}"
     Write-Host "Target repository: $TargetRepoPath"

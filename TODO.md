@@ -42,6 +42,7 @@ Goal: prove the core loop with minimal dependencies and no real AI CLI complexit
 - [x] Add PowerShell and shell start scripts.
 - [x] Add startup selection for target repository folder.
 - [x] Add graphical folder picker for target repository selection.
+- [x] Open web UI automatically from start scripts when a graphical shell is available.
 - [x] Add unit tests for database bootstrap and lock compatibility.
 
 Exit criteria:
