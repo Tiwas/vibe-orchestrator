@@ -36,6 +36,28 @@ function New-ProjectVenv {
 }
 
 function Select-TargetRepo {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+
+        $Dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $Dialog.Description = "Select the repository folder Vibe Orchestrator should work on"
+        $Dialog.RootFolder = [System.Environment+SpecialFolder]::Desktop
+        $Dialog.SelectedPath = $LaunchDir
+        $Dialog.ShowNewFolderButton = $false
+
+        $Result = $Dialog.ShowDialog()
+        if ($Result -ne [System.Windows.Forms.DialogResult]::OK -or [string]::IsNullOrWhiteSpace($Dialog.SelectedPath)) {
+            throw "No target repository selected."
+        }
+
+        return $Dialog.SelectedPath
+    }
+    catch {
+        if ($_.Exception.Message -eq "No target repository selected.") {
+            throw
+        }
+    }
+
     $Shell = $null
     try {
         $Shell = New-Object -ComObject Shell.Application
@@ -45,7 +67,9 @@ function Select-TargetRepo {
     }
 
     if ($null -ne $Shell) {
-        $Folder = $Shell.BrowseForFolder(0, "Select the repository folder Vibe Orchestrator should work on", 0, $LaunchDir)
+        $DrivesRoot = 17
+        $NewDialogStyle = 0x40
+        $Folder = $Shell.BrowseForFolder(0, "Select the repository folder Vibe Orchestrator should work on", $NewDialogStyle, $DrivesRoot)
         if ($null -eq $Folder) {
             throw "No target repository selected."
         }
@@ -53,19 +77,7 @@ function Select-TargetRepo {
         return $Folder.Self.Path
     }
 
-    Add-Type -AssemblyName System.Windows.Forms
-
-    $Dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $Dialog.Description = "Select the repository folder Vibe Orchestrator should work on"
-    $Dialog.SelectedPath = $LaunchDir
-    $Dialog.ShowNewFolderButton = $false
-
-    $Result = $Dialog.ShowDialog()
-    if ($Result -ne [System.Windows.Forms.DialogResult]::OK -or [string]::IsNullOrWhiteSpace($Dialog.SelectedPath)) {
-        throw "No target repository selected."
-    }
-
-    return $Dialog.SelectedPath
+    throw "No graphical folder picker is available. Use -Repo or -NoPicker."
 }
 
 function Resolve-TargetRepo {
