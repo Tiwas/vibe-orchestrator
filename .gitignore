@@ -7,6 +7,7 @@ env/
 .env
 .env.*
 .vibe/
+input/
 *.db
 *.sqlite
 *.sqlite3

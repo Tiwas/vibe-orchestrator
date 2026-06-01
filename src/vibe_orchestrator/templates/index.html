@@ -6,74 +6,127 @@
     <title>Vibe Orchestrator</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
-  <body>
-    <header class="topbar">
-      <div>
-        <h1>Vibe Orchestrator</h1>
-        <p id="health">Connecting...</p>
-      </div>
-      <button id="refresh-button" type="button">Refresh</button>
-    </header>
-
-    <main class="layout">
-      <section class="panel">
-        <h2>Create Job</h2>
-        <form id="job-form">
-          <label>
-            Work package
-            <textarea id="work-package" rows="5" required placeholder="Describe the job"></textarea>
-          </label>
-          <div class="grid">
-            <label>
-              Provider
-              <select id="provider-family">
-                <option value="fake">Fake</option>
-                <option value="codex">Codex (planned)</option>
-                <option value="claude">Claude (planned)</option>
-              </select>
-            </label>
-            <label>
-              Model
-              <input id="model" placeholder="Leave blank for suggestions">
-            </label>
-            <label>
-              Priority
-              <input id="priority" type="number" value="50">
-            </label>
+  <body data-density="regular">
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <div>
+            <h1>Vibe Orchestrator</h1>
+            <p id="health">Connecting...</p>
           </div>
-          <label>
-            Affected resources
-            <input id="affected" placeholder="file:src/app.py, area:scheduler">
-          </label>
-          <div class="actions">
-            <button type="button" id="suggest-model-button">Suggest Model</button>
-            <button type="submit">Create Job</button>
+        </div>
+
+        <div class="summary">
+          <div class="sum">
+            <strong id="summary-running">0</strong>
+            <span>Running</span>
           </div>
-          <div id="model-suggestions" class="suggestions"></div>
-        </form>
-      </section>
+          <div class="sum">
+            <strong id="summary-queued">0</strong>
+            <span>Queued</span>
+          </div>
+          <div class="sum">
+            <strong id="summary-agents">0</strong>
+            <span>Agents</span>
+          </div>
+          <div class="sum">
+            <strong id="summary-events">0</strong>
+            <span>Events</span>
+          </div>
+        </div>
 
-      <section class="panel">
-        <h2>Now / Priority Log</h2>
-        <div id="dashboard" class="stack"></div>
-      </section>
+        <div class="top-actions">
+          <div class="health-pill"><span class="health-dot"></span><span>local</span></div>
+          <button id="refresh-button" type="button">Refresh</button>
+          <button id="new-job-button" type="button">New Job</button>
+        </div>
+      </header>
 
-      <section class="panel">
-        <h2>Jobs</h2>
-        <div id="jobs" class="stack"></div>
-      </section>
+      <main class="layout">
+        <section class="panel create-panel" id="create-job-panel">
+          <div class="panel-head">
+            <h2>Create Job</h2>
+            <span class="panel-count">v0.1</span>
+          </div>
+          <form id="job-form" class="panel-body">
+            <label>
+              Work package
+              <textarea id="work-package" rows="6" required placeholder="Describe the job"></textarea>
+            </label>
+            <div class="grid">
+              <label>
+                Provider
+                <select id="provider-family">
+                  <option value="fake">Fake</option>
+                  <option value="codex">Codex (planned)</option>
+                  <option value="claude">Claude (planned)</option>
+                </select>
+              </label>
+              <label>
+                Model
+                <input id="model" placeholder="Leave blank">
+              </label>
+              <label>
+                Priority
+                <input id="priority" type="number" value="50">
+              </label>
+            </div>
+            <label>
+              Affected resources
+              <input id="affected" placeholder="file:src/app.py, area:scheduler">
+            </label>
+            <div class="actions">
+              <button type="button" id="suggest-model-button" class="secondary">Suggest Model</button>
+              <button type="submit">Create Job</button>
+            </div>
+            <div id="model-suggestions" class="suggestions"></div>
+          </form>
+        </section>
 
-      <section class="panel">
-        <h2>Agents</h2>
-        <div id="agents" class="stack"></div>
-      </section>
+        <section class="panel agents-panel">
+          <div class="panel-head">
+            <h2>Active Agents</h2>
+            <span id="agent-count" class="panel-count">0</span>
+          </div>
+          <div id="agents" class="agents panel-body"></div>
+        </section>
 
-      <section class="panel wide">
-        <h2>Events</h2>
-        <div id="events" class="events"></div>
-      </section>
-    </main>
+        <section class="side-stack">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Now / Priority Log</h2>
+              <span id="queue-count" class="panel-count">0</span>
+            </div>
+            <div id="dashboard" class="queue panel-body"></div>
+          </div>
 
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Locks</h2>
+              <span class="panel-count">preview</span>
+            </div>
+            <div id="locks" class="locks panel-body"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Review</h2>
+              <span id="review-count" class="panel-count">0</span>
+            </div>
+            <div id="review" class="review panel-body"></div>
+          </div>
+        </section>
+
+        <section class="panel events-panel">
+          <div class="panel-head">
+            <h2>Work Log</h2>
+            <span class="live"><span></span>Live</span>
+          </div>
+          <div id="events" class="events panel-body"></div>
+        </section>
+      </main>
+    </div>
     <script src="/static/app.js"></script>
   </body>
 </html>

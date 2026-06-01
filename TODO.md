@@ -35,6 +35,7 @@ Goal: prove the core loop with minimal dependencies and no real AI CLI complexit
 - [x] Add simple web UI for job creation and event display.
 - [x] Add UI panel for current work and prioritized job log.
 - [x] Add UI flow for model suggestions with rationale and user choice.
+- [x] Apply mock-inspired operational dashboard layout.
 - [x] Add fake agent adapter that emits progress messages.
 - [x] Add message endpoint for user-to-agent messages.
 - [x] Add basic control endpoint for pause, stop, restart, sync, and close.
