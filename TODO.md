@@ -38,6 +38,7 @@ Goal: prove the core loop with minimal dependencies and no real AI CLI complexit
 - [x] Add fake agent adapter that emits progress messages.
 - [x] Add message endpoint for user-to-agent messages.
 - [x] Add basic control endpoint for pause, stop, restart, sync, and close.
+- [x] Add PowerShell and shell start scripts.
 - [x] Add unit tests for database bootstrap and lock compatibility.
 
 Exit criteria:

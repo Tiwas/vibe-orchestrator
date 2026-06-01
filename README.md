@@ -17,10 +17,26 @@ See [PLAN.md](PLAN.md) for the implementation plan, risks, and future functional
 
 ## Local Development
 
+Windows PowerShell:
+
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -e .
-.\.venv\Scripts\python -m vibe_orchestrator
+.\scripts\start-server.ps1
+```
+
+macOS/Linux/Git Bash:
+
+```sh
+./scripts/start-server.sh
 ```
 
 Then open `http://127.0.0.1:8765`.
+
+Useful options:
+
+```powershell
+.\scripts\start-server.ps1 -Port 9000 -NoInstall
+```
+
+```sh
+./scripts/start-server.sh --port 9000 --no-install
+```
