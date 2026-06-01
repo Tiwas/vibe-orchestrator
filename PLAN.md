@@ -43,10 +43,51 @@ Target project repositories
 Recommended first stack:
 
 - Backend: Python with FastAPI.
-- Database: SQLite.
+- Operational state and queues: SQLite.
+- Append-only logs and exports: JSONL.
 - Frontend: server-rendered HTML plus small JavaScript modules using `fetch`.
 - Agent process handling: Python `asyncio.subprocess` initially, optional PTY support later.
 - Source isolation: Git worktrees where available, otherwise temporary clones or copied workspaces.
+
+### 3.1 Queue and Log Technology
+
+SQLite should be the operational queue and state store.
+
+Use SQLite for:
+
+- Jobs.
+- Locks.
+- Agents.
+- Messages.
+- Events.
+- Workspaces.
+- Leases and heartbeats.
+- Retry and acknowledgement state.
+
+JSONL should be the append-only log and interchange format.
+
+Use JSONL for:
+
+- Audit log export.
+- Per-agent transcript export.
+- Per-job evidence bundles.
+- Optional manual job import.
+- Debug snapshots.
+
+The orchestrator should not use JSONL as the active queue. Reordering lines in a file is convenient for humans, but it becomes fragile once the system needs leases, priorities, lock arbitration, retries, acknowledgements, concurrent readers, stale lock cleanup, and atomic job claiming.
+
+Queue order should be controlled by fields in SQLite:
+
+```text
+priority
+created_at
+not_before
+status
+blocked_by
+lease_expires_at
+```
+
+For durability, SQLite should run in WAL mode. For transparency, important state changes should also be written to JSONL as append-only records. The SQLite database is the source of truth during operation; JSONL is the human-readable audit and export layer.
 
 ## 4. Repository and Workspace Strategy
 
@@ -388,7 +429,7 @@ The agent prompt should instruct every agent to check the message buffer regular
 
 ### 5.7 Event Log
 
-The event log is append-only and drives the UI.
+The operational event log lives in SQLite and drives the UI. Important events should also be mirrored or exported to JSONL as append-only audit records.
 
 Suggested fields:
 
@@ -425,7 +466,7 @@ Useful event types:
 
 ### 5.8 Per-Job Evidence Bundle
 
-SQLite should be the operational source of truth for queues, locks, messages, and events. JSONL is still useful as an export format, especially for audit trails and commit attachments.
+SQLite should be the operational source of truth for queues, locks, messages, and events. JSONL is the export format for audit trails, transcripts, and commit attachments.
 
 For every job, the orchestrator should be able to generate a filtered evidence bundle:
 
