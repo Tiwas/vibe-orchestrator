@@ -394,9 +394,11 @@ Suggested fields:
 
 ```text
 event_id
+job_id
 source_type: orchestrator | scheduler | agent | user | adapter
 source_id
 event_type
+correlation_id
 payload_json
 created_at
 ```
@@ -420,6 +422,49 @@ Useful event types:
 - `workspace.created`
 - `workspace.diff_ready`
 - `merge.ready_for_review`
+
+### 5.8 Per-Job Evidence Bundle
+
+SQLite should be the operational source of truth for queues, locks, messages, and events. JSONL is still useful as an export format, especially for audit trails and commit attachments.
+
+For every job, the orchestrator should be able to generate a filtered evidence bundle:
+
+```text
+job-<job_id>/
+  job.json
+  locks.jsonl
+  messages.jsonl
+  events.jsonl
+  transcript.md
+  diff.patch
+  checks.json
+  summary.md
+```
+
+The bundle should include:
+
+- Original work package.
+- Model and provider.
+- Base commit.
+- Granted locks.
+- User messages.
+- Agent messages.
+- Relevant stdout and stderr.
+- Orchestrator events.
+- Final diff.
+- Validation results.
+- Final agent summary.
+
+This makes it possible to attach job context to a commit, pull request, or review without making the active queue file-based. The commit should not include noisy full logs by default, but it can include a short trailer or reference:
+
+```text
+Vibe-Job: <job_id>
+Vibe-Agent: <agent_id>
+Vibe-Base-Commit: <sha>
+Vibe-Evidence: .vibe/jobs/<job_id>/summary.md
+```
+
+Whether the full evidence bundle is committed should be configurable per project. Some teams may want full audit artifacts in the repository. Others may prefer to keep them in `.vibe/` storage outside Git and only reference the job ID from commit messages.
 
 ## 6. Agent Lifecycle
 
@@ -475,6 +520,8 @@ The orchestrator should:
 - Compare final diff against granted locks.
 - Flag edits outside the allowed affected resources.
 - Run configured checks.
+- Generate a per-job evidence bundle.
+- Add job metadata or trailers to the commit message.
 - Present diff to the user.
 - Merge only after policy approval.
 
@@ -707,6 +754,7 @@ The MVP should not include:
 - Add heartbeat and stale lease recovery.
 - Add better restart behavior.
 - Add audit export.
+- Add per-job evidence bundle export.
 - Add configuration file.
 
 ## 12. Future Functionality
@@ -832,11 +880,13 @@ Possible solutions:
 - How much command filtering should happen before the first working prototype?
 - Should merge approval be manual-only in MVP?
 - Should adapter definitions be Python classes only, or partly config-driven?
+- Should full per-job evidence bundles be committed, stored outside Git, or only exported on demand?
 
 Recommended initial decisions:
 
 - Use plain JavaScript for the first UI.
 - Use SQLite with a simple schema bootstrap first.
+- Use JSONL for audit/export bundles, not as the operational queue.
 - Prefer Git worktrees and fail clearly if unavailable.
 - Keep command filtering conservative but simple.
 - Make merge approval manual-only.
