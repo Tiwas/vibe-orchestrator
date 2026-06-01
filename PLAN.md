@@ -751,6 +751,7 @@ The first version should include:
 - Local FastAPI backend.
 - SQLite database.
 - Basic web UI.
+- Startup selection for one target repository folder, with graphical picker where available.
 - Job queue.
 - Message queue.
 - Event log.

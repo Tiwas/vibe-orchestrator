@@ -20,23 +20,25 @@ See [PLAN.md](PLAN.md) for the implementation plan, risks, and future functional
 Windows PowerShell:
 
 ```powershell
-.\scripts\start-server.ps1
+.\scripts\start-server.ps1 -Repo C:\path\to\project
 ```
 
-macOS/Linux/Git Bash:
+macOS/Linux:
 
 ```sh
-./scripts/start-server.sh
+./scripts/start-server.sh --repo /path/to/project
 ```
 
 Then open `http://127.0.0.1:8765`.
 
+If `-Repo` / `--repo` is omitted, the start script opens a graphical folder picker when one is available. Use `-NoPicker` / `--no-picker` to fall back to the current directory.
+
 Useful options:
 
 ```powershell
-.\scripts\start-server.ps1 -Port 9000 -NoInstall
+.\scripts\start-server.ps1 -Repo C:\path\to\project -Port 9000 -NoInstall
 ```
 
 ```sh
-./scripts/start-server.sh --port 9000 --no-install
+./scripts/start-server.sh --repo /path/to/project --port 9000 --no-install
 ```

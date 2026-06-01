@@ -3,9 +3,12 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+LAUNCH_DIR=$(pwd)
 VENV_DIR="$REPO_ROOT/.venv"
 HOST="${VIBE_ORCHESTRATOR_HOST:-127.0.0.1}"
 PORT="${VIBE_ORCHESTRATOR_PORT:-8765}"
+TARGET_REPO_INPUT="${VIBE_ORCHESTRATOR_TARGET_REPO:-}"
+NO_PICKER=0
 NO_INSTALL=0
 
 while [ "$#" -gt 0 ]; do
@@ -18,12 +21,20 @@ while [ "$#" -gt 0 ]; do
             PORT="$2"
             shift 2
             ;;
+        --repo)
+            TARGET_REPO_INPUT="$2"
+            shift 2
+            ;;
         --no-install)
             NO_INSTALL=1
             shift
             ;;
+        --no-picker)
+            NO_PICKER=1
+            shift
+            ;;
         -h|--help)
-            echo "Usage: scripts/start-server.sh [--host 127.0.0.1] [--port 8765] [--no-install]"
+            echo "Usage: scripts/start-server.sh [--repo /path/to/project] [--host 127.0.0.1] [--port 8765] [--no-install] [--no-picker]"
             exit 0
             ;;
         *)
@@ -36,11 +47,6 @@ done
 find_venv_python() {
     if [ -x "$VENV_DIR/bin/python" ]; then
         printf '%s\n' "$VENV_DIR/bin/python"
-        return 0
-    fi
-
-    if [ -x "$VENV_DIR/Scripts/python.exe" ]; then
-        printf '%s\n' "$VENV_DIR/Scripts/python.exe"
         return 0
     fi
 
@@ -62,6 +68,71 @@ create_venv() {
     exit 1
 }
 
+pick_target_repo() {
+    case "$(uname -s)" in
+        Darwin)
+            if command -v osascript >/dev/null 2>&1; then
+                osascript -e 'POSIX path of (choose folder with prompt "Select the repository folder Vibe Orchestrator should work on")'
+                return $?
+            fi
+            ;;
+    esac
+
+    if command -v zenity >/dev/null 2>&1; then
+        zenity --file-selection --directory --title="Select repository folder"
+        return $?
+    fi
+
+    if command -v kdialog >/dev/null 2>&1; then
+        kdialog --getexistingdirectory "$LAUNCH_DIR" --title "Select repository folder"
+        return $?
+    fi
+
+    return 2
+}
+
+resolve_target_repo() {
+    if [ -z "$TARGET_REPO_INPUT" ]; then
+        if [ "$NO_PICKER" -eq 1 ]; then
+            TARGET_REPO_INPUT="$LAUNCH_DIR"
+        else
+            set +e
+            PICKED_REPO=$(pick_target_repo)
+            PICKER_STATUS=$?
+            set -e
+
+            if [ "$PICKER_STATUS" -eq 0 ] && [ -n "$PICKED_REPO" ]; then
+                TARGET_REPO_INPUT="$PICKED_REPO"
+            elif [ "$PICKER_STATUS" -eq 2 ]; then
+                echo "No graphical folder picker found; using current directory: $LAUNCH_DIR" >&2
+                TARGET_REPO_INPUT="$LAUNCH_DIR"
+            else
+                echo "No target repository selected." >&2
+                exit 1
+            fi
+        fi
+    fi
+
+    case "$TARGET_REPO_INPUT" in
+        /*)
+            TARGET_REPO_CANDIDATE="$TARGET_REPO_INPUT"
+            ;;
+        *)
+            TARGET_REPO_CANDIDATE="$LAUNCH_DIR/$TARGET_REPO_INPUT"
+            ;;
+    esac
+
+    if [ ! -d "$TARGET_REPO_CANDIDATE" ]; then
+        echo "Target repository folder does not exist: $TARGET_REPO_INPUT" >&2
+        exit 1
+    fi
+
+    TARGET_REPO=$(CDPATH= cd -- "$TARGET_REPO_CANDIDATE" && pwd)
+    printf '%s\n' "$TARGET_REPO"
+}
+
+TARGET_REPO=$(resolve_target_repo)
+
 cd "$REPO_ROOT"
 
 if ! PYTHON_EXE=$(find_venv_python); then
@@ -77,6 +148,8 @@ fi
 
 export VIBE_ORCHESTRATOR_HOST="$HOST"
 export VIBE_ORCHESTRATOR_PORT="$PORT"
+export VIBE_ORCHESTRATOR_TARGET_REPO="$TARGET_REPO"
 
 echo "Starting Vibe Orchestrator on http://$HOST:$PORT"
+echo "Target repository: $TARGET_REPO"
 exec "$PYTHON_EXE" -m vibe_orchestrator

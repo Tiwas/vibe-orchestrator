@@ -50,7 +50,7 @@ function splitAffected(value) {
 
 async function loadHealth() {
   const health = await api("/api/health");
-  elements.health.textContent = `${health.status} - SQLite: ${health.db_path}`;
+  elements.health.textContent = `${health.status} - repo: ${health.target_repo.path} - SQLite: ${health.db_path}`;
 }
 
 async function loadJobs() {

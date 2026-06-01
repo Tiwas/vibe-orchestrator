@@ -17,7 +17,8 @@ from .model_suggester import suggest_models
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
-DEFAULT_DATA_DIR = Path(os.environ.get("VIBE_ORCHESTRATOR_HOME", ".vibe"))
+DEFAULT_TARGET_REPO = Path(os.environ.get("VIBE_ORCHESTRATOR_TARGET_REPO", os.getcwd())).expanduser().resolve()
+DEFAULT_DATA_DIR = Path(os.environ.get("VIBE_ORCHESTRATOR_HOME", DEFAULT_TARGET_REPO / ".vibe"))
 DEFAULT_DB_PATH = Path(os.environ.get("VIBE_ORCHESTRATOR_DB", DEFAULT_DATA_DIR / "orchestrator.sqlite"))
 DEFAULT_EVENT_LOG_PATH = Path(
     os.environ.get("VIBE_ORCHESTRATOR_EVENTS", DEFAULT_DATA_DIR / "logs" / "events.jsonl")
@@ -61,7 +62,11 @@ async def lifespan(app: FastAPI):
         source_type="orchestrator",
         source_id="local",
         event_type="orchestrator.started",
-        payload={"db_path": str(DEFAULT_DB_PATH), "event_log_path": str(DEFAULT_EVENT_LOG_PATH)},
+        payload={
+            "target_repo": str(DEFAULT_TARGET_REPO),
+            "db_path": str(DEFAULT_DB_PATH),
+            "event_log_path": str(DEFAULT_EVENT_LOG_PATH),
+        },
     )
     yield
     store.append_event(
@@ -95,6 +100,11 @@ def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "version": "0.1.0",
+        "target_repo": {
+            "path": str(DEFAULT_TARGET_REPO),
+            "exists": DEFAULT_TARGET_REPO.exists(),
+            "is_git_repo": (DEFAULT_TARGET_REPO / ".git").exists(),
+        },
         "db_path": str(DEFAULT_DB_PATH),
         "event_log_path": str(DEFAULT_EVENT_LOG_PATH),
         "providers": [

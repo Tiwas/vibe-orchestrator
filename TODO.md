@@ -39,6 +39,8 @@ Goal: prove the core loop with minimal dependencies and no real AI CLI complexit
 - [x] Add message endpoint for user-to-agent messages.
 - [x] Add basic control endpoint for pause, stop, restart, sync, and close.
 - [x] Add PowerShell and shell start scripts.
+- [x] Add startup selection for target repository folder.
+- [x] Add graphical folder picker for target repository selection.
 - [x] Add unit tests for database bootstrap and lock compatibility.
 
 Exit criteria:
