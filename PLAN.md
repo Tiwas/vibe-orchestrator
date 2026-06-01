@@ -48,9 +48,178 @@ Recommended first stack:
 - Agent process handling: Python `asyncio.subprocess` initially, optional PTY support later.
 - Source isolation: Git worktrees where available, otherwise temporary clones or copied workspaces.
 
-## 4. Main Components
+## 4. Repository and Workspace Strategy
 
-### 4.1 Web UI
+Agents should not work directly in the same working tree. The recommended strategy is to use the same source repository, but create an isolated Git worktree and branch per job or agent.
+
+```text
+canonical checkout
+  main branch
+  used by orchestrator for fetch, pull, merge, review, and final state
+
+agent workspace A
+  git worktree
+  branch: agent/job-a
+
+agent workspace B
+  git worktree
+  branch: agent/job-b
+```
+
+Locks should be stored in the orchestrator database, not in the Git working tree. A lock can still be held from job start until commit, review, or merge is complete.
+
+Example:
+
+```text
+job-a holds:
+  file:src/locks.py
+  area:scheduler
+
+job-b waits because:
+  file:src/locks.py conflicts with job-a
+```
+
+### 4.1 Recommended Flow
+
+1. Orchestrator fetches or pulls the canonical checkout.
+2. Job is created with a recorded `base_commit`.
+3. Lock manager derives lock requests from `affected`.
+4. If locks are granted, the orchestrator creates `agent/<job_id>`.
+5. The orchestrator creates a dedicated worktree for the agent.
+6. The agent runs only inside that worktree.
+7. When the agent finishes, the orchestrator validates the diff against granted locks.
+8. The orchestrator runs configured tests and checks.
+9. The orchestrator commits the result on the agent branch.
+10. The orchestrator rebases or merges against the latest canonical branch.
+11. Conflicts are marked for review.
+12. Locks are released only after completion, cancellation, or explicit cleanup.
+
+### 4.2 Option A: Shared Working Tree
+
+All agents operate inside the same checkout and same filesystem tree.
+
+Pros:
+
+- Simple mental model.
+- Easy for every agent to see the latest local state.
+- A dirty working tree is immediately visible to all agents.
+- File locks can feel more concrete because every agent points at the same path.
+- Less disk usage than multiple worktrees.
+
+Cons:
+
+- High risk of accidental overwrite or partial edits.
+- Shared Git index can become a bottleneck or source of corruption.
+- `git status` becomes ambiguous because unrelated agent changes are mixed together.
+- Rollback is hard because one failed agent can leave the whole repo dirty.
+- Restarting one agent without disturbing others is difficult.
+- Temp files, generated files, package manager side effects, and test artifacts are shared.
+- A model that ignores instructions can edit outside its intended files.
+- Merge conflicts are discovered late and in a less controlled state.
+
+Conclusion:
+
+Do not use a shared working tree for autonomous or semi-autonomous parallel agents. It may be acceptable only for a single foreground agent under direct user supervision.
+
+### 4.3 Option B: Each Orchestrator Pulls Its Own Checkout
+
+Each orchestrator has a separate local clone and pulls from the remote before starting work.
+
+Pros:
+
+- Orchestrators do not share a mutable working tree.
+- Easier to run different provider orchestrators independently.
+- Local crashes are isolated to one orchestrator's clone.
+- Works across multiple machines.
+- A clean repo check is meaningful inside each checkout.
+
+Cons:
+
+- Requires a shared lock/job database to avoid overlapping work.
+- Can drift if orchestrators pull at different times.
+- Conflicts may only appear when pushing or merging later.
+- More disk usage.
+- Requires careful tracking of `base_commit`, branch, remote, and repo identity.
+- Remote-only coordination is not enough if two orchestrators do not share locks.
+
+Conclusion:
+
+This is viable for multiple orchestrators, especially across machines, but it should still use per-job worktrees or branches inside each checkout. Pulling alone is not a concurrency strategy.
+
+### 4.4 Option C: Per-Agent Git Worktrees
+
+Each job gets a separate worktree and branch derived from a known base commit.
+
+Pros:
+
+- Strong isolation without copying the full repository.
+- Each agent has a clean and meaningful `git status`.
+- Easy to inspect, diff, commit, abandon, or retry one job.
+- Agents cannot physically overwrite each other's working files.
+- Locks can be held until commit, review, merge, or cleanup.
+- Merge conflicts are handled explicitly at integration time.
+- Works well with multiple local agents and multiple provider families.
+- The orchestrator can validate that final edits match granted locks.
+
+Cons:
+
+- Requires Git worktree support.
+- More implementation complexity than a shared working tree.
+- Generated artifacts and dependency caches may still need policy decisions.
+- Long-running jobs can become stale relative to the canonical branch.
+- Cleanup logic is required for abandoned worktrees and branches.
+- Some tools behave poorly when run from worktrees if they assume repo root paths.
+
+Conclusion:
+
+This should be the default strategy for the MVP. It gives the best balance between safety, debuggability, and implementation cost.
+
+### 4.5 Option D: Full Clone Per Agent
+
+Each job gets a complete clone instead of a Git worktree.
+
+Pros:
+
+- Strongest filesystem isolation.
+- Simple cleanup model.
+- Useful for remote SSH sessions or non-Git workspaces.
+- Avoids edge cases from tools that dislike Git worktrees.
+
+Cons:
+
+- More disk usage.
+- Slower startup.
+- Requires more network or filesystem work.
+- Harder to share caches efficiently.
+- More complicated if the source remote requires credentials.
+
+Conclusion:
+
+Use full clones as a fallback when Git worktrees are unavailable or when remote execution makes worktrees impractical.
+
+### 4.6 Recommended Policy
+
+For the first version:
+
+- Use one canonical checkout per target project.
+- Use one Git worktree per job.
+- Use one branch per job.
+- Record `base_commit` for every job.
+- Keep locks in SQLite.
+- Keep locks until commit, merge, cancellation, or cleanup.
+- Never let agents edit the canonical checkout directly.
+- Treat pull/rebase/merge as orchestrator-owned actions.
+
+For multiple orchestrators:
+
+- Allow each orchestrator to have its own canonical checkout.
+- Require a shared lock/job database before multiple orchestrators work on the same project.
+- Use leases and heartbeats so stale jobs and locks can be recovered.
+- Use explicit repo identity fields so two paths pointing at the same remote are recognized as the same project.
+
+## 5. Main Components
+
+### 5.1 Web UI
 
 The UI should expose:
 
@@ -72,7 +241,7 @@ All UI refreshes should use AJAX:
 
 The first version can use polling every 1-2 seconds while a tab is active, with slower polling when idle.
 
-### 4.2 Backend Service
+### 5.2 Backend Service
 
 The backend owns:
 
@@ -87,7 +256,7 @@ The backend owns:
 
 The backend should not depend on one specific AI provider.
 
-### 4.3 Agent Adapters
+### 5.3 Agent Adapters
 
 Each CLI provider should be wrapped by an adapter:
 
@@ -116,7 +285,7 @@ Future adapters:
 - Custom local model runners.
 - Remote SSH adapters.
 
-### 4.4 Job Queue
+### 5.4 Job Queue
 
 Jobs represent work that should be performed by an agent.
 
@@ -148,7 +317,7 @@ model: "gpt-5"
 provider_family: "codex"
 ```
 
-### 4.5 Lock Queue
+### 5.5 Lock Queue
 
 Locks represent claimed resources.
 
@@ -186,7 +355,7 @@ Initial lock rules:
 
 The lock system should be conservative. If the orchestrator is unsure, it should block or widen the lock instead of allowing unsafe concurrency.
 
-### 4.6 Message Queue
+### 5.6 Message Queue
 
 Messages support bidirectional communication between the user, orchestrator, and agents.
 
@@ -217,7 +386,7 @@ Control message examples:
 
 The agent prompt should instruct every agent to check the message buffer regularly. However, the orchestrator must not rely only on model compliance. External process controls are still required.
 
-### 4.7 Event Log
+### 5.7 Event Log
 
 The event log is append-only and drives the UI.
 
@@ -252,7 +421,7 @@ Useful event types:
 - `workspace.diff_ready`
 - `merge.ready_for_review`
 
-## 5. Agent Lifecycle
+## 6. Agent Lifecycle
 
 1. User creates a job in the web UI.
 2. Backend validates the request.
@@ -272,9 +441,9 @@ Useful event types:
 16. Locks are released.
 17. Agent window can be closed and workspace can be cleaned up.
 
-## 6. Safety Model
+## 7. Safety Model
 
-### 6.1 Request Sanity Check
+### 7.1 Request Sanity Check
 
 Before a job is accepted, validate:
 
@@ -286,7 +455,7 @@ Before a job is accepted, validate:
 
 Risky jobs should be marked `needs_review` instead of being started automatically.
 
-### 6.2 Runtime Safety
+### 7.2 Runtime Safety
 
 At runtime:
 
@@ -297,7 +466,7 @@ At runtime:
 - Track process IDs and child processes where possible.
 - Prefer soft stop first, hard stop if the agent ignores control messages.
 
-### 6.3 Merge Safety
+### 7.3 Merge Safety
 
 Agents should not merge directly.
 
@@ -309,7 +478,7 @@ The orchestrator should:
 - Present diff to the user.
 - Merge only after policy approval.
 
-## 7. Multiple Orchestrators
+## 8. Multiple Orchestrators
 
 The design should support multiple orchestrators later.
 
@@ -338,7 +507,7 @@ heartbeat_at
 
 SQLite is sufficient for a single local orchestrator. For multiple orchestrators on the same machine, SQLite can still work if leases are simple. For multiple machines, use Postgres or another network-safe database.
 
-## 8. Remote SSH Sessions
+## 9. Remote SSH Sessions
 
 Remote SSH execution should be future functionality, not part of the first MVP.
 
@@ -364,7 +533,7 @@ Remote CLI agent
 
 Two possible approaches:
 
-### 8.1 SSH Command Mode
+### 9.1 SSH Command Mode
 
 The local orchestrator runs commands over SSH directly:
 
@@ -384,7 +553,7 @@ Cons:
 - Harder reconnect behavior.
 - More fragile for long-running agents.
 
-### 8.2 Remote Runner Daemon
+### 9.2 Remote Runner Daemon
 
 Install a lightweight remote runner service:
 
@@ -446,7 +615,7 @@ started_at
 ended_at
 ```
 
-## 9. MVP Scope
+## 10. MVP Scope
 
 The first version should include:
 
@@ -476,7 +645,7 @@ The MVP should not include:
 - Fine-grained symbol locks.
 - Cloud-hosted agents.
 
-## 10. Suggested Milestones
+## 11. Suggested Milestones
 
 ### Milestone 1: Project Skeleton
 
@@ -540,7 +709,7 @@ The MVP should not include:
 - Add audit export.
 - Add configuration file.
 
-## 11. Future Functionality
+## 12. Future Functionality
 
 Potential future functionality:
 
@@ -572,7 +741,7 @@ Potential future functionality:
 - Policy-as-code for allowed commands.
 - Sandboxed execution using containers where practical.
 
-## 12. Main Barriers and Possible Solutions
+## 13. Main Barriers and Possible Solutions
 
 ### Barrier: CLI tools are not stable APIs
 
@@ -655,7 +824,7 @@ Possible solutions:
 - Track remote sessions and PIDs.
 - Keep remote session support behind an explicit feature flag initially.
 
-## 13. Open Design Decisions
+## 14. Open Design Decisions
 
 - Should the first UI use a small frontend framework or plain JavaScript?
 - Should the database schema use Alembic migrations from day one?
@@ -673,7 +842,7 @@ Recommended initial decisions:
 - Make merge approval manual-only.
 - Implement adapters as Python classes first.
 
-## 14. Initial Repository Layout
+## 15. Initial Repository Layout
 
 ```text
 vibe-orchestrator/
@@ -705,7 +874,7 @@ vibe-orchestrator/
     test_scheduler.py
 ```
 
-## 15. Recommended First Implementation
+## 16. Recommended First Implementation
 
 Start by implementing only the following:
 
