@@ -38,12 +38,17 @@ class Store:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA foreign_keys=ON")
             conn.executescript(SCHEMA)
+            self._ensure_column(conn, "jobs", "touched_json", "TEXT NOT NULL DEFAULT '[]'")
 
     def connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, factory=ClosingConnection)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
+
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        if column not in _column_names(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def create_job(
         self,
@@ -57,14 +62,15 @@ class Store:
         job_id = new_id("job")
         now = utc_now()
         affected_json = encode_json(affected or [])
+        touched_json = encode_json([])
         with self.connect() as conn:
             conn.execute(
                 """
                 INSERT INTO jobs (
                     job_id, status, provider_family, model, work_package,
-                    priority, affected_json, created_at, updated_at
+                    priority, affected_json, touched_json, created_at, updated_at
                 )
-                VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job_id,
@@ -73,6 +79,7 @@ class Store:
                     work_package,
                     priority,
                     affected_json,
+                    touched_json,
                     now,
                     now,
                 ),
@@ -88,6 +95,32 @@ class Store:
                 "priority": priority,
                 "affected": affected or [],
             },
+        )
+        return self.get_job(job_id)
+
+    def add_touched_resource(self, job_id: str, resource: str, agent_id: str | None = None) -> dict[str, Any]:
+        normalized_resource = resource.strip()
+        if not normalized_resource:
+            return self.get_job(job_id)
+
+        job = self.get_job(job_id)
+        touched = list(job.get("touched", []))
+        if normalized_resource in touched:
+            return job
+
+        touched.append(normalized_resource)
+        now = utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE jobs SET touched_json = ?, updated_at = ? WHERE job_id = ?",
+                (encode_json(touched), now, job_id),
+            )
+        self.append_event(
+            job_id=job_id,
+            source_type="agent",
+            source_id=agent_id,
+            event_type="job.touched_resource",
+            payload={"resource": normalized_resource, "touched": touched},
         )
         return self.get_job(job_id)
 
@@ -324,6 +357,7 @@ class Store:
 def normalize_job(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["affected"] = decode_json(item.pop("affected_json"), [])
+    item["touched"] = decode_json(item.pop("touched_json", None), [])
     return item
 
 
@@ -332,6 +366,10 @@ class ClosingConnection(sqlite3.Connection):
         result = super().__exit__(exc_type, exc_value, traceback)
         self.close()
         return result
+
+
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
 def normalize_message(row: sqlite3.Row) -> dict[str, Any]:
@@ -355,6 +393,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     work_package TEXT NOT NULL,
     priority INTEGER NOT NULL DEFAULT 50,
     affected_json TEXT NOT NULL DEFAULT '[]',
+    touched_json TEXT NOT NULL DEFAULT '[]',
     base_commit TEXT,
     lease_owner_orchestrator TEXT,
     lease_expires_at TEXT,

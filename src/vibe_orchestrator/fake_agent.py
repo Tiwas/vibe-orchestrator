@@ -25,7 +25,9 @@ class FakeAgentRuntime:
             model=job["model"],
         )
         self.store.update_job_status(job["job_id"], "running", {"agent_id": agent["agent_id"]})
-        task = asyncio.create_task(self._run(agent["agent_id"], job["job_id"], job["work_package"]))
+        task = asyncio.create_task(
+            self._run(agent["agent_id"], job["job_id"], job["work_package"], job.get("affected", []))
+        )
         self.state.tasks[agent["agent_id"]] = task
         task.add_done_callback(lambda _: self.state.tasks.pop(agent["agent_id"], None))
         return agent
@@ -77,7 +79,7 @@ class FakeAgentRuntime:
 
         return {"status": "accepted", "command": normalized}
 
-    async def _run(self, agent_id: str, job_id: str, work_package: str) -> None:
+    async def _run(self, agent_id: str, job_id: str, work_package: str, affected: list[str]) -> None:
         self.store.update_agent_status(agent_id, "running")
         self.store.append_message(
             agent_id=agent_id,
@@ -89,11 +91,12 @@ class FakeAgentRuntime:
 
         steps = [
             "Reading work package",
-            "Checking affected resources",
+            "Checking expected resources",
             "Planning changes",
             "Simulating implementation",
             "Preparing result summary",
         ]
+        discovered_resources = infer_touched_resources(work_package, affected)
 
         try:
             for index, step in enumerate(steps, start=1):
@@ -119,6 +122,16 @@ class FakeAgentRuntime:
                     message_type="status",
                     payload={"text": step, "step": index, "total_steps": len(steps)},
                 )
+                if index in {2, 4} and discovered_resources:
+                    resource = discovered_resources.pop(0)
+                    self.store.add_touched_resource(job_id, resource, agent_id=agent_id)
+                    self.store.append_message(
+                        agent_id=agent_id,
+                        job_id=job_id,
+                        direction="agent_to_user",
+                        message_type="status",
+                        payload={"text": f"Touched resource: {resource}"},
+                    )
                 await asyncio.sleep(0.6)
 
             self.store.append_message(
@@ -137,3 +150,20 @@ class FakeAgentRuntime:
         finally:
             self.state.stop_agents.discard(agent_id)
             self.state.paused_agents.discard(agent_id)
+
+
+def infer_touched_resources(work_package: str, affected: list[str]) -> list[str]:
+    if affected:
+        return list(dict.fromkeys(affected))
+
+    text = work_package.lower()
+    resources = []
+    if any(keyword in text for keyword in ["ui", "frontend", "web", "browser", "css"]):
+        resources.append("area:web-ui")
+    if any(keyword in text for keyword in ["db", "database", "sqlite", "queue", "lock"]):
+        resources.append("area:orchestrator-state")
+    if any(keyword in text for keyword in ["plan", "todo", "docs", "readme"]):
+        resources.append("file:PLAN.md")
+    if not resources:
+        resources.append("area:implementation")
+    return resources

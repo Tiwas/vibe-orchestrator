@@ -73,8 +73,8 @@
               </label>
             </div>
             <label>
-              Affected resources
-              <input id="affected" placeholder="file:src/app.py, area:scheduler">
+              Expected resources (optional)
+              <input id="affected" placeholder="optional: file:src/app.py, area:scheduler">
             </label>
             <div class="actions">
               <button type="button" id="suggest-model-button" class="secondary">Suggest Model</button>
@@ -121,7 +121,7 @@
         <section class="panel events-panel">
           <div class="panel-head">
             <h2>Work Log</h2>
-            <span class="live"><span></span>Live</span>
+            <span class="panel-count">events</span>
           </div>
           <div id="events" class="events panel-body"></div>
         </section>

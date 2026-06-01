@@ -27,10 +27,12 @@ Goal: prove the core loop with minimal dependencies and no real AI CLI complexit
 - [x] Add JSONL event mirroring.
 - [x] Add tables for jobs, agents, locks, messages, events, and workspaces.
 - [x] Add `/api/health`.
-- [x] Add AJAX event polling with `GET /api/events?after=<event_id>`.
+- [x] Add quiet AJAX event polling with `GET /api/events?after=<event_id>`.
 - [x] Add dashboard endpoint for current work and prioritized job log.
 - [x] Add job creation endpoint.
 - [x] Add job list endpoint.
+- [x] Allow blank expected-resource lists on jobs.
+- [x] Track actual touched resources separately from expected resources.
 - [x] Add model suggestion endpoint for blank model selection.
 - [x] Add simple web UI for job creation and event display.
 - [x] Add UI panel for current work and prioritized job log.
@@ -59,7 +61,8 @@ Exit criteria:
 Goal: make queue selection and locking explicit.
 
 - [ ] Implement lock compatibility rules.
-- [ ] Derive initial locks from `affected`.
+- [ ] Derive initial locks from optional expected resources.
+- [ ] Expand or validate locks from agent-reported touched resources.
 - [ ] Add job priority handling.
 - [ ] Add job lease fields and lifecycle transitions.
 - [ ] Add stale lease detection.

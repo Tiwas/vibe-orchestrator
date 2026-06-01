@@ -124,7 +124,7 @@ job-b waits because:
 
 1. Orchestrator fetches or pulls the canonical checkout.
 2. Job is created with a recorded `base_commit`.
-3. Lock manager derives lock requests from `affected`.
+3. Lock manager derives lock requests from optional expected resources, then reconciles them with touched resources reported by the agent.
 4. If locks are granted, the orchestrator creates `agent/<job_id>`.
 5. The orchestrator creates a dedicated worktree for the agent.
 6. The agent runs only inside that worktree.
@@ -340,7 +340,7 @@ The recommendation engine should consider:
 - Available local adapters.
 - Authenticated provider CLIs.
 - Work package complexity.
-- Affected resources.
+- Expected and touched resources.
 - Expected need for reasoning, speed, or broad code edits.
 - Project-level model preferences.
 - User-level model preferences.
@@ -380,7 +380,8 @@ provider_family: codex | claude | other
 model: gpt-* | opus | haiku | sonnet | other
 work_package
 priority
-affected
+affected: optional predeclared resources
+touched: resources discovered and touched by the agent
 created_by
 lease_owner_orchestrator
 lease_expires_at
@@ -395,6 +396,7 @@ agent_id: null
 work_package: "Implement lock conflict detection"
 priority: 50
 affected: ["file:orchestrator/locks.py", "area:scheduler"]
+touched: []
 model: "gpt-5"
 provider_family: "codex"
 ```
@@ -553,7 +555,7 @@ Whether the full evidence bundle is committed should be configurable per project
 1. User creates a job in the web UI.
 2. Backend validates the request.
 3. Scheduler selects jobs matching the current orchestrator's supported providers and models.
-4. Backend derives lock requests from `affected`.
+4. Backend derives initial lock requests from `affected` when present, or lets the agent discover touched resources under conservative runtime locks.
 5. Lock manager grants or blocks locks.
 6. Backend creates an isolated workspace.
 7. Backend starts the correct CLI adapter.
@@ -576,7 +578,7 @@ Before a job is accepted, validate:
 
 - The work package is not asking for destructive filesystem changes outside the target project.
 - The job does not request credential theft, secret dumping, malware behavior, or bypassing access controls.
-- `affected` is present or can be derived.
+- `affected` may be blank; if so, the scheduler starts with conservative assumptions and records `touched` resources as the agent works.
 - The requested model/provider is available.
 - The target repo/workspace exists.
 
@@ -599,8 +601,8 @@ Agents should not merge directly.
 
 The orchestrator should:
 
-- Compare final diff against granted locks.
-- Flag edits outside the allowed affected resources.
+- Compare final diff against granted locks and recorded `touched` resources.
+- Flag edits outside the allowed/discovered resource set.
 - Run configured checks.
 - Generate a per-job evidence bundle.
 - Add job metadata or trailers to the commit message.
@@ -813,7 +815,8 @@ The MVP should not include:
 
 - Add lock table.
 - Add lock compatibility rules.
-- Derive locks from `affected`.
+- Derive initial locks from `affected` when present.
+- Track actual touched resources separately from predeclared resources.
 - Block conflicting jobs.
 - Show active locks in UI.
 

@@ -34,6 +34,8 @@ const elements = {
   reviewCount: document.querySelector("#review-count"),
 };
 
+let pollInFlight = false;
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -144,7 +146,7 @@ function renderAgents() {
       </div>
       <div class="agent-meta">
         <span>${escapeHtml(job ? `P${job.priority}` : "P-")}</span>
-        <span>${escapeHtml((job && job.affected && job.affected.join(", ")) || "no locks requested")}</span>
+        <span>${escapeHtml(job ? resourceSummary(job) : "resources unknown")}</span>
       </div>
       <div class="controls">
         ${controlButton(agent.agent_id, "sync", "Sync")}
@@ -186,22 +188,22 @@ function renderDashboard() {
 function renderLocks() {
   elements.locks.innerHTML = "";
   const jobs = state.jobs
-    .filter((job) => (job.affected || []).length > 0)
+    .filter((job) => resourceRows(job).length > 0)
     .sort((a, b) => statusWeight(a.status) - statusWeight(b.status) || b.priority - a.priority);
 
   if (jobs.length === 0) {
-    elements.locks.append(empty("No affected resources declared"));
+    elements.locks.append(empty("Resources will be discovered as agents touch them"));
     return;
   }
 
   for (const job of jobs.slice(0, 12)) {
-    for (const lock of job.affected.slice(0, 4)) {
+    for (const lock of resourceRows(job).slice(0, 4)) {
       const row = document.createElement("div");
       row.className = `lock-row ${statusClass(job.status)}`;
       row.innerHTML = `
         <span class="lock-state"></span>
-        <span class="lock-key">${escapeHtml(lock)}</span>
-        <span class="lock-mode">write</span>
+        <span class="lock-key">${escapeHtml(lock.resource)}</span>
+        <span class="lock-mode">${escapeHtml(lock.mode)}</span>
         <span class="lock-owner">${escapeHtml(shortId(job.job_id))}</span>
       `;
       elements.locks.append(row);
@@ -228,7 +230,7 @@ function renderReview() {
         ${statusPill(job.status)}
       </div>
       <p>${escapeHtml(job.work_package)}</p>
-      <small>${escapeHtml((job.affected || []).join(", ") || "no affected resources")}</small>
+      <small>${escapeHtml(resourceSummary(job))}</small>
     `;
     elements.review.append(item);
   }
@@ -290,11 +292,29 @@ function queueRow(job, section) {
         <span>${escapeHtml(job.provider_family)} / ${escapeHtml(job.model)}</span>
         <span>${escapeHtml(agentLabel || "unassigned")}</span>
       </div>
-      <div class="queue-affect">${escapeHtml((job.affected || []).join(", ") || "no affected resources")}</div>
+      <div class="queue-affect">${escapeHtml(resourceSummary(job))}</div>
     </div>
     ${statusPill(job.status)}
   `;
   return row;
+}
+
+function resourceRows(job) {
+  const touched = job && Array.isArray(job.touched) ? job.touched : [];
+  const affected = job && Array.isArray(job.affected) ? job.affected : [];
+  const rows = touched.map((resource) => ({ resource, mode: "touched" }));
+  const seen = new Set(touched);
+  for (const resource of affected) {
+    if (!seen.has(resource)) rows.push({ resource, mode: "expected" });
+  }
+  return rows;
+}
+
+function resourceSummary(job) {
+  const rows = resourceRows(job);
+  if (rows.length === 0) return "resources will be discovered";
+  const mode = rows.some((row) => row.mode === "touched") ? "touched" : "expected";
+  return `${mode}: ${rows.map((row) => row.resource).join(", ")}`;
 }
 
 function controlButton(agentId, command, label, tone = "") {
@@ -394,6 +414,21 @@ async function refreshAll() {
   renderAll();
 }
 
+async function pollForUpdates() {
+  if (pollInFlight) return;
+  pollInFlight = true;
+  try {
+    const previousEventId = state.lastEventId;
+    await loadEvents();
+    if (state.lastEventId !== previousEventId) {
+      await Promise.all([loadJobs(), loadAgents(), loadDashboard()]);
+      renderAll();
+    }
+  } finally {
+    pollInFlight = false;
+  }
+}
+
 async function createJob() {
   await api("/api/jobs", {
     method: "POST",
@@ -471,7 +506,7 @@ refreshAll().catch((error) => {
 });
 
 setInterval(() => {
-  refreshAll().catch((error) => {
+  pollForUpdates().catch((error) => {
     elements.health.textContent = `Error: ${error.message}`;
   });
 }, 1200);
