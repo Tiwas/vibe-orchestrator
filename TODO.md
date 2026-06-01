@@ -21,20 +21,24 @@ This TODO is the execution checklist for [PLAN.md](PLAN.md). `PLAN.md` is the ar
 
 Goal: prove the core loop with minimal dependencies and no real AI CLI complexity.
 
-- [ ] Create Python package skeleton.
-- [ ] Add FastAPI backend.
-- [ ] Add SQLite bootstrap with WAL mode.
-- [ ] Add JSONL event mirroring.
-- [ ] Add tables for jobs, agents, locks, messages, events, and workspaces.
-- [ ] Add `/api/health`.
-- [ ] Add AJAX event polling with `GET /api/events?after=<event_id>`.
-- [ ] Add job creation endpoint.
-- [ ] Add job list endpoint.
-- [ ] Add simple web UI for job creation and event display.
-- [ ] Add fake agent adapter that emits progress messages.
-- [ ] Add message endpoint for user-to-agent messages.
-- [ ] Add basic control endpoint for pause, stop, restart, sync, and close.
-- [ ] Add unit tests for database bootstrap and lock compatibility.
+- [x] Create Python package skeleton.
+- [x] Add FastAPI backend.
+- [x] Add SQLite bootstrap with WAL mode.
+- [x] Add JSONL event mirroring.
+- [x] Add tables for jobs, agents, locks, messages, events, and workspaces.
+- [x] Add `/api/health`.
+- [x] Add AJAX event polling with `GET /api/events?after=<event_id>`.
+- [x] Add dashboard endpoint for current work and prioritized job log.
+- [x] Add job creation endpoint.
+- [x] Add job list endpoint.
+- [x] Add model suggestion endpoint for blank model selection.
+- [x] Add simple web UI for job creation and event display.
+- [x] Add UI panel for current work and prioritized job log.
+- [x] Add UI flow for model suggestions with rationale and user choice.
+- [x] Add fake agent adapter that emits progress messages.
+- [x] Add message endpoint for user-to-agent messages.
+- [x] Add basic control endpoint for pause, stop, restart, sync, and close.
+- [x] Add unit tests for database bootstrap and lock compatibility.
 
 Exit criteria:
 
@@ -154,4 +158,4 @@ These are intentionally out of v0.1.
 
 ## Immediate Next Step
 
-Start v0.1 by implementing the local skeleton, SQLite schema, JSONL event mirror, web UI shell, and fake agent adapter.
+Continue with v0.2 by making queue scheduling and lock arbitration explicit.

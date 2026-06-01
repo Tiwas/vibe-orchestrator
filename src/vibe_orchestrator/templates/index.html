@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vibe Orchestrator</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Vibe Orchestrator</h1>
+        <p id="health">Connecting...</p>
+      </div>
+      <button id="refresh-button" type="button">Refresh</button>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h2>Create Job</h2>
+        <form id="job-form">
+          <label>
+            Work package
+            <textarea id="work-package" rows="5" required placeholder="Describe the job"></textarea>
+          </label>
+          <div class="grid">
+            <label>
+              Provider
+              <select id="provider-family">
+                <option value="fake">Fake</option>
+                <option value="codex">Codex (planned)</option>
+                <option value="claude">Claude (planned)</option>
+              </select>
+            </label>
+            <label>
+              Model
+              <input id="model" placeholder="Leave blank for suggestions">
+            </label>
+            <label>
+              Priority
+              <input id="priority" type="number" value="50">
+            </label>
+          </div>
+          <label>
+            Affected resources
+            <input id="affected" placeholder="file:src/app.py, area:scheduler">
+          </label>
+          <div class="actions">
+            <button type="button" id="suggest-model-button">Suggest Model</button>
+            <button type="submit">Create Job</button>
+          </div>
+          <div id="model-suggestions" class="suggestions"></div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Now / Priority Log</h2>
+        <div id="dashboard" class="stack"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Jobs</h2>
+        <div id="jobs" class="stack"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Agents</h2>
+        <div id="agents" class="stack"></div>
+      </section>
+
+      <section class="panel wide">
+        <h2>Events</h2>
+        <div id="events" class="events"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

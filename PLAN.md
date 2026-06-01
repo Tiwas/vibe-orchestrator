@@ -265,12 +265,15 @@ For multiple orchestrators:
 The UI should expose:
 
 - Job queue.
+- Prioritized job log.
+- Current work overview.
 - Active agents.
 - Lock queue.
 - Provider health.
 - Recent events.
 - Per-agent transcript windows.
 - Controls for pause, stop, restart, sync, close, and manual message.
+- Model suggestions when the model field is left blank.
 
 All UI refreshes should use AJAX:
 
@@ -281,6 +284,8 @@ All UI refreshes should use AJAX:
 - `POST /api/agents/{agent_id}/control` for pause, stop, restart, sync, and close.
 
 The first version can use polling every 1-2 seconds while a tab is active, with slower polling when idle.
+
+The UI should have a dedicated "Now / Priority Log" view. This should show what is actively being worked on, which agent owns the work, and the next queued jobs ordered by priority. This view should be a compact operational dashboard, separate from the raw event log.
 
 ### 5.2 Backend Service
 
@@ -326,7 +331,43 @@ Future adapters:
 - Custom local model runners.
 - Remote SSH adapters.
 
-### 5.4 Job Queue
+### 5.4 Model Selection
+
+Users should be allowed to leave the model field blank. A blank model should not silently fall back to a default. Instead, the orchestrator should suggest one or more model/provider options, explain the reasoning, and let the user choose before the job starts.
+
+The recommendation engine should consider:
+
+- Available local adapters.
+- Authenticated provider CLIs.
+- Work package complexity.
+- Affected resources.
+- Expected need for reasoning, speed, or broad code edits.
+- Project-level model preferences.
+- User-level model preferences.
+
+For v0.1, model suggestions can be heuristic and limited to the fake adapter plus placeholder entries for planned adapters. Once real adapters are implemented, suggestions should be based on adapter-reported capabilities rather than hard-coded model lists.
+
+Suggested response shape:
+
+```json
+{
+  "suggestions": [
+    {
+      "provider_family": "fake",
+      "model": "fake",
+      "label": "Fake adapter",
+      "rationale": "Best for validating queue, UI, messages, and event flow.",
+      "tradeoffs": "Does not perform real code changes.",
+      "confidence": 0.95,
+      "available": true
+    }
+  ]
+}
+```
+
+If a client submits a job with a blank model, the API should return `model_choice_required` with suggestions instead of starting the job.
+
+### 5.5 Job Queue
 
 Jobs represent work that should be performed by an agent.
 
@@ -358,7 +399,7 @@ model: "gpt-5"
 provider_family: "codex"
 ```
 
-### 5.5 Lock Queue
+### 5.6 Lock Queue
 
 Locks represent claimed resources.
 
@@ -396,7 +437,7 @@ Initial lock rules:
 
 The lock system should be conservative. If the orchestrator is unsure, it should block or widen the lock instead of allowing unsafe concurrency.
 
-### 5.6 Message Queue
+### 5.7 Message Queue
 
 Messages support bidirectional communication between the user, orchestrator, and agents.
 
@@ -427,7 +468,7 @@ Control message examples:
 
 The agent prompt should instruct every agent to check the message buffer regularly. However, the orchestrator must not rely only on model compliance. External process controls are still required.
 
-### 5.7 Event Log
+### 5.8 Event Log
 
 The operational event log lives in SQLite and drives the UI. Important events should also be mirrored or exported to JSONL as append-only audit records.
 
@@ -464,7 +505,7 @@ Useful event types:
 - `workspace.diff_ready`
 - `merge.ready_for_review`
 
-### 5.8 Per-Job Evidence Bundle
+### 5.9 Per-Job Evidence Bundle
 
 SQLite should be the operational source of truth for queues, locks, messages, and events. JSONL is the export format for audit trails, transcripts, and commit attachments.
 
@@ -945,8 +986,10 @@ vibe-orchestrator/
       __init__.py
       app.py
       db.py
+      fake_agent.py
       scheduler.py
       locks.py
+      model_suggester.py
       messages.py
       events.py
       workspace.py
